@@ -1,0 +1,5 @@
+---
+path: github.com/mediocregopher/growler
+deps:
+    - loc: github.com/mediocregopher/flagconfig
+    - loc: code.google.com/p/go.net/html
