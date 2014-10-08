@@ -2,6 +2,7 @@ package main
 
 import (
 	"code.google.com/p/go.net/html"
+	"container/list"
 	"io"
 	"io/ioutil"
 	"log"
@@ -14,10 +15,8 @@ import (
 	"time"
 	
 	"github.com/mediocregopher/growler/config"
+	"github.com/mediocregopher/growler/tracker"
 )
-
-var incoming = make(chan []*url.URL)
-var outgoing = make(chan *url.URL, config.NumDownloaders)
 
 var parseSearch = map[string]string{
 	"a":   "href",
@@ -28,7 +27,6 @@ var rootURL *url.URL
 var rootPath string
 
 func init() {
-	go filter()
 	for i := 0; i < config.NumDownloaders; i++ {
 		go crawl()
 	}
@@ -40,25 +38,6 @@ func init() {
 	}
 	rootURL = rootReq.URL
 	rootPath = path.Clean(rootURL.Path)
-}
-
-func cleanURL(u *url.URL) {
-	p := u.Path
-	u.Path = path.Clean(p)
-}
-
-func filter() {
-	m := map[string]struct{}{}
-	for pages := range incoming {
-		for _, page := range pages {
-			cleanURL(page)
-			pageStr := page.String()
-			if _, ok := m[pageStr]; !ok {
-				m[pageStr] = struct{}{}
-				outgoing <- page
-			}
-		}
-	}
 }
 
 func extractLinks(body io.Reader) ([]string, error) {
@@ -230,8 +209,15 @@ func maybeGetPage(
 	return r, f, filePath, false, nil
 }
 
-func processPage(client *http.Client, page *url.URL) {
-	log.Printf("processPage on %s", page)
+func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
+	retURLs = make([]*url.URL, 0, 0)
+	page.Path = path.Clean(page.Path)
+
+	if !tracker.CanFetch(page.Path) {
+		return
+	}
+
+	log.Printf("processesing %s", page)
 
 	r, body, filePath, store, err := maybeGetPage(client, page)
 	if err != nil {
@@ -281,7 +267,7 @@ func processPage(client *http.Client, page *url.URL) {
 		return
 	}
 
-	absURLs := make([]*url.URL, 0, len(links))
+	retURLs = make([]*url.URL, 0, len(links))
 	for _, link := range links {
 		linkURL, err := url.Parse(link)
 		if err != nil {
@@ -291,24 +277,35 @@ func processPage(client *http.Client, page *url.URL) {
 
 		absURL := page.ResolveReference(linkURL)
 		if strings.HasPrefix(path.Clean(absURL.Path), rootPath) {
-			absURLs = append(absURLs, absURL)
+			retURLs = append(retURLs, absURL)
 		}
 	}
 
-	if len(absURLs) > 0 {
-		go func() {
-			select {
-			case incoming <- absURLs:
-			case <-time.After(1 * time.Second):
-			}
-		}()
-	}
+	return retURLs
 }
 
 func crawl() {
 	client := new(http.Client)
-	for page := range outgoing {
-		processPage(client, page)
+	l := list.New()
+
+	for {
+		select {
+		case page := <-tracker.FreeLinks():
+			l.PushFront([]*url.URL{page})
+			break
+		}
+
+		for ;l.Len() > 0; {
+			pages := l.Remove(l.Front()).([]*url.URL)
+			for _, page := range pages {
+				retURLs := processPage(client, page)
+				if len(retURLs) == 0 {
+					continue
+				} 
+				tracker.AddFreeLinks(retURLs)
+				l.PushFront(retURLs)
+			}
+		}
 	}
 }
 
@@ -317,6 +314,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("parsing src: %s", err)
 	}
-	incoming <- []*url.URL{srcURL}
+
+	tracker.AddFreeLinks([]*url.URL{srcURL})
 	select {}
 }
