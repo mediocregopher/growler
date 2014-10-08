@@ -3,6 +3,7 @@ package main
 import (
 	"code.google.com/p/go.net/html"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -259,6 +260,19 @@ func processPage(client *http.Client, page *url.URL) {
 		bodyReader = io.TeeReader(body, f)
 	} else {
 		bodyReader = body
+	}
+
+	// At this point reading from bodyReader will also write to the
+	// corresponding file for this page on the filesystem, if necessary. In the
+	// next part we only extractLinks from a page which is html, otherwise we
+	// io.Copy into an ioutil.Discard to "read" the whole page, so that we write
+	// to the page's file if necessary.
+
+	if r.Header.Get("Content-Type") != "text/html" {
+		if _, err := io.Copy(ioutil.Discard, bodyReader); err != nil {
+			log.Printf("Copy page: %s err: %s", page, err)
+		}
+		return
 	}
 
 	links, err := extractLinks(bodyReader)	
