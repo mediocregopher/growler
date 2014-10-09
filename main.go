@@ -291,19 +291,19 @@ func crawl() {
 	for {
 		select {
 		case page := <-tracker.FreeLinks():
-			l.PushFront([]*url.URL{page})
+			l.PushFront(page)
 			break
 		}
 
 		for ;l.Len() > 0; {
-			pages := l.Remove(l.Front()).([]*url.URL)
-			for _, page := range pages {
-				retURLs := processPage(client, page)
-				if len(retURLs) == 0 {
-					continue
-				} 
-				tracker.AddFreeLinks(retURLs)
-				l.PushFront(retURLs)
+			page := l.Remove(l.Front()).(*url.URL)
+			retURLs := processPage(client, page)
+			if len(retURLs) == 0 {
+				continue
+			}
+			tracker.AddFreeLinks(retURLs)
+			for i := range retURLs {
+				l.PushFront(retURLs[i])
 			}
 		}
 	}
