@@ -241,19 +241,24 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 
 	var bodyReader io.Reader
 	if store {
-		log.Printf("storing as %s", filePath)
-		fileDir := path.Dir(filePath)
-		if err := os.MkdirAll(fileDir, 0755); err != nil {
-			log.Fatalf("MkdirAll(%s) err: %s", fileDir, err)
-			return
-		}
+		if _, ok := config.ExcludeFiles[path.Base(filePath)]; ok {
+			log.Printf("skipping %s because exclude", filePath)
+			bodyReader = body
+		} else {
+			log.Printf("storing as %s", filePath)
+			fileDir := path.Dir(filePath)
+			if err := os.MkdirAll(fileDir, 0755); err != nil {
+				log.Fatalf("MkdirAll(%s) err: %s", fileDir, err)
+				return
+			}
 
-		f, err := os.Create(filePath)
-		if err != nil {
-			log.Fatalf("Create(%s) err: %s", filePath, err)
+			f, err := os.Create(filePath)
+			if err != nil {
+				log.Fatalf("Create(%s) err: %s", filePath, err)
+			}
+			defer f.Close()
+			bodyReader = io.TeeReader(body, f)
 		}
-		defer f.Close()
-		bodyReader = io.TeeReader(body, f)
 	} else {
 		bodyReader = body
 	}
