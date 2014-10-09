@@ -163,7 +163,7 @@ func maybeGetPage(
 	if err != nil {
 		return nil, nil, "", false, err
 	}
-	r.Body.Close() // HEAD response has no body, but we Close anyway
+	drainAndClose(r.Body) // HEAD response has no body, but we Close anyway
 
 	// We recompute the filePath and filestat in case the HEAD got redirected
 	// and we're actually looking at a different file now
@@ -209,6 +209,11 @@ func maybeGetPage(
 	return r, f, filePath, false, nil
 }
 
+func drainAndClose(b io.ReadCloser) {
+	io.Copy(ioutil.Discard, b)
+	b.Close()
+}
+
 func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 	retURLs = make([]*url.URL, 0, 0)
 	page.Path = path.Clean(page.Path)
@@ -224,7 +229,7 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 		log.Printf("getPage: %s err: %s", page, err)
 		return
 	}
-	defer body.Close()
+	defer drainAndClose(body)
 
 	// page might have changed inside of maybeGetPage due to redirects
 	page = r.Request.URL
