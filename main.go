@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 	
@@ -27,6 +28,12 @@ var rootURL *url.URL
 var rootPath string
 
 func init() {
+	numProcs := 1
+	if runtime.NumCPU() > 1 {
+		numProcs = runtime.NumCPU() - 1
+	}
+	runtime.GOMAXPROCS(numProcs)
+
 	for i := 0; i < config.NumDownloaders; i++ {
 		go crawl()
 	}

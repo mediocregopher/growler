@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"github.com/mediocregopher/flagconfig"
+	"runtime"
 )
 
 var (
@@ -21,7 +22,7 @@ func init() {
 	fc.RequiredStrParam("src", "The source url of the files to be mirrored")
 	fc.RequiredStrParam("dst", "The destination directory to mirror to")
 	fc.FlagParam("force-download", "Don't ignore files based on download times, always re-download", false)
-	fc.IntParam("num-downloaders", "Number of go-routines to be downloading at any given time", 10)
+	fc.IntParam("num-downloaders", "Number of go-routines to be downloading at any given time", runtime.NumCPU())
 	fc.StrParams("exclude-file", "Exclude a filename from being stored to disk.  Can be specified multiple times")
 
 	if err := fc.Parse(); err != nil {
