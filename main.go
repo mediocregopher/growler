@@ -296,6 +296,9 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 
 func crawl() {
 	client := new(http.Client)
+	client.Transport = &http.Transport{
+		MaxIdleConnsPerHost: 100,
+	}
 	l := list.New()
 
 	for {
