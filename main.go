@@ -2,7 +2,6 @@ package main
 
 import (
 	"code.google.com/p/go.net/html"
-	"container/list"
 	"io"
 	"io/ioutil"
 	"log"
@@ -13,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mediocregopher/growler/config"
@@ -26,15 +26,11 @@ var parseSearch = map[string]string{
 
 var rootURL *url.URL
 var rootPath string
+var wg sync.WaitGroup
 
 func init() {
 	log.Printf("Setting GOMAXPRROCS to %d", config.NumProcs)
 	runtime.GOMAXPROCS(config.NumProcs)
-
-	log.Printf("Spawning %d downloaders", config.NumDownloaders)
-	for i := 0; i < config.NumDownloaders; i++ {
-		go crawl()
-	}
 
 	var err error
 	rootReq, err := http.NewRequest("GET", config.Src, nil)
@@ -304,27 +300,26 @@ func crawl() {
 	client.Transport = &http.Transport{
 		MaxIdleConnsPerHost: 100,
 	}
-	l := list.New()
 
-	for {
-		select {
-		case page := <-tracker.FreeLinks():
-			l.PushFront(page)
-			break
+	for i := 0; i < 3; {
+		page := tracker.FreeLink()
+		if page == nil {
+			i++
+			log.Printf("downloader waiting (%d)", i)
+			time.Sleep(30 * time.Second)
+			continue
 		}
+		i = 0
 
-		for l.Len() > 0 {
-			page := l.Remove(l.Front()).(*url.URL)
-			retURLs := processPage(client, page)
-			if len(retURLs) == 0 {
-				continue
-			}
-			tracker.AddFreeLinks(retURLs)
-			for i := range retURLs {
-				l.PushFront(retURLs[i])
-			}
+		retURLs := processPage(client, page)
+		if len(retURLs) == 0 {
+			continue
 		}
+		tracker.AddFreeLinks(retURLs)
 	}
+
+	log.Println("downloader routine done")
+	wg.Done()
 }
 
 func main() {
@@ -334,5 +329,12 @@ func main() {
 	}
 
 	tracker.AddFreeLinks([]*url.URL{srcURL})
-	select {}
+
+	log.Printf("Spawning %d downloaders", config.NumDownloaders)
+	for i := 0; i < config.NumDownloaders; i++ {
+		go crawl()
+		wg.Add(1)
+	}
+
+	wg.Wait()
 }

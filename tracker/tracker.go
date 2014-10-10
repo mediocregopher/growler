@@ -1,16 +1,17 @@
 package tracker
 
 import (
+	"container/list"
 	"net/url"
 	"sync"
 )
 
 var tracker = map[string]struct{}{}
-var lock = sync.Mutex{}
+var trackerLock = sync.Mutex{}
 
 func CanFetch(path string) bool {
-	lock.Lock()
-	defer lock.Unlock()
+	trackerLock.Lock()
+	defer trackerLock.Unlock()
 
 	if _, ok := tracker[path]; ok {
 		return false
@@ -20,18 +21,26 @@ func CanFetch(path string) bool {
 	return true
 }
 
-var freeLinks = make(chan *url.URL, 1024)
+var freeLinks = list.New()
+var freeLinksLock = sync.Mutex{}
 
-func FreeLinks() <-chan *url.URL {
-	return freeLinks
+func FreeLink() *url.URL {
+	freeLinksLock.Lock()
+	defer freeLinksLock.Unlock()
+
+	f := freeLinks.Front()
+	if f == nil {
+		return nil
+	}
+
+	return freeLinks.Remove(f).(*url.URL)
 }
 
 func AddFreeLinks(u []*url.URL) {
+	freeLinksLock.Lock()
+	defer freeLinksLock.Unlock()
+
 	for i := range u {
-		select {
-		case freeLinks <- u[i]:
-		default:
-			return
-		}
+		freeLinks.PushFront(u[i])
 	}
 }
