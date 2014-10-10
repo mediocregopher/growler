@@ -1,23 +1,23 @@
 package config
 
 import (
-	"log"
 	"github.com/mediocregopher/flagconfig"
+	"log"
 	"runtime"
 )
 
 var (
-	Src string
-	Dst string
-	ForceDownload bool
+	Src            string
+	Dst            string
+	ForceDownload  bool
 	NumDownloaders int
-	NumProcs int
-	ExcludeFiles map[string]struct{}
+	NumProcs       int
+	ExcludeFiles   map[string]struct{}
 )
 
 func init() {
 	fc := flagconfig.New("growler")
-	fc.DisallowConfig();
+	fc.DisallowConfig()
 	fc.SetDelimiter("-")
 
 	numProcs := 1
@@ -44,7 +44,7 @@ func init() {
 	ForceDownload = fc.GetFlag("force-download")
 	NumDownloaders = fc.GetInt("num-downloaders")
 	NumProcs = fc.GetInt("num-procs")
-	
+
 	ex := fc.GetStrs("exclude-file")
 	ExcludeFiles = map[string]struct{}{}
 	for _, filename := range ex {

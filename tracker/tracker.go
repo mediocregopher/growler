@@ -1,8 +1,8 @@
 package tracker
 
 import (
-	"sync"
 	"net/url"
+	"sync"
 )
 
 var tracker = map[string]struct{}{}
@@ -35,4 +35,3 @@ func AddFreeLinks(u []*url.URL) {
 		}
 	}
 }
-

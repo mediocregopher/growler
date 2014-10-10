@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	
+
 	"github.com/mediocregopher/growler/config"
 	"github.com/mediocregopher/growler/tracker"
 )
@@ -202,12 +202,12 @@ func maybeGetPage(
 	if lm.After(filestat.ModTime()) {
 		return getPage(client, page)
 	}
-	
+
 	if r.ContentLength != filestat.Size() {
 		return getPage(client, page)
 	}
 
-	f, err := os.Open(filePath)	
+	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, nil, "", false, err
 	}
@@ -276,7 +276,7 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 		return
 	}
 
-	links, err := extractLinks(bodyReader)	
+	links, err := extractLinks(bodyReader)
 	if err != nil {
 		log.Printf("extractLinks page: %s err: %s", page, err)
 		return
@@ -313,7 +313,7 @@ func crawl() {
 			break
 		}
 
-		for ;l.Len() > 0; {
+		for l.Len() > 0 {
 			page := l.Remove(l.Front()).(*url.URL)
 			retURLs := processPage(client, page)
 			if len(retURLs) == 0 {
