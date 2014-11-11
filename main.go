@@ -103,15 +103,47 @@ func getFilePath(u *url.URL) (string, error) {
 	return filePath, nil
 }
 
+type downloader struct {
+	i int
+}
+
+func (d *downloader) Println(args ...interface{}) {
+	fargs := make([]interface{}, 0, len(args) + 2)
+	fargs = append(fargs, d.i, "-")
+	fargs = append(fargs, args...)
+	log.Print(fargs...)
+}
+
+func (d *downloader) Printf(format string, args ...interface{}) {
+	fargs := make([]interface{}, 0, len(args) + 1)
+	fargs = append(fargs, d.i)
+	fargs = append(fargs, args...)
+	log.Printf("%d - " + format, fargs...)
+}
+
+func (d *downloader) Fatal(args ...interface{}) {
+	fargs := make([]interface{}, 0, len(args) + 2)
+	fargs = append(fargs, d.i, "-")
+	fargs = append(fargs, args...)
+	log.Fatal(fargs...)
+}
+
+func (d *downloader) Fatalf(format string, args ...interface{}) {
+	fargs := make([]interface{}, 0, len(args) + 1)
+	fargs = append(fargs, d.i)
+	fargs = append(fargs, args...)
+	log.Fatalf("%d - " + format, fargs...)
+}
+
 // Does a GET to retrieve the file from disk and returns the io.ReadCloser for
 // the body. Also returns whether or not the body should be written to disk
 // (always true).
-func getPage(
+func (d *downloader) getPage(
 	client *http.Client, page *url.URL,
 ) (
 	*http.Response, io.ReadCloser, string, bool, error,
 ) {
-	log.Printf("GET %s", page)
+	d.Printf("GET %s", page)
 	r, err := client.Get(page.String())
 	if err != nil {
 		return nil, nil, "", true, err
@@ -131,7 +163,7 @@ func getPage(
 // * the filePath to use
 // * whether the contents of the io.ReadCloser should be written to the file for
 //   the page.
-func maybeGetPage(
+func (d *downloader) maybeGetPage(
 	client *http.Client, page *url.URL,
 ) (
 	*http.Response, io.ReadCloser, string, bool, error,
@@ -147,19 +179,19 @@ func maybeGetPage(
 	}
 
 	if config.ForceDownload {
-		return getPage(client, page)
+		return d.getPage(client, page)
 	}
 
 	filestat, err = os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return getPage(client, page)
+			return d.getPage(client, page)
 		} else {
 			return nil, nil, "", false, err
 		}
 	}
 
-	log.Printf("HEAD %s", page)
+	d.Printf("HEAD %s", page)
 	r, err := client.Head(page.String())
 	if err != nil {
 		return nil, nil, "", false, err
@@ -176,7 +208,7 @@ func maybeGetPage(
 	filestat, err = os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return getPage(client, page)
+			return d.getPage(client, page)
 		} else {
 			return nil, nil, "", false, err
 		}
@@ -186,21 +218,21 @@ func maybeGetPage(
 	// We don't want to make any assumptions if we don't know the last modified
 	// time
 	if lmStr == "" {
-		return getPage(client, page)
+		return d.getPage(client, page)
 	}
 
 	lm, err := time.Parse(time.RFC1123, lmStr)
 	if err != nil {
-		log.Printf("error parsing last modified (%s); %s", lmStr, err)
-		return getPage(client, page)
+		d.Printf("error parsing last modified (%s); %s", lmStr, err)
+		return d.getPage(client, page)
 	}
 
 	if lm.After(filestat.ModTime()) {
-		return getPage(client, page)
+		return d.getPage(client, page)
 	}
 
 	if r.ContentLength != filestat.Size() {
-		return getPage(client, page)
+		return d.getPage(client, page)
 	}
 
 	f, err := os.Open(filePath)
@@ -215,7 +247,11 @@ func drainAndClose(b io.ReadCloser) {
 	b.Close()
 }
 
-func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
+func (d *downloader) processPage(
+	client *http.Client, page *url.URL,
+) (
+	retURLs []*url.URL,
+) {
 	retURLs = make([]*url.URL, 0, 0)
 	page.Path = path.Clean(page.Path)
 
@@ -223,11 +259,11 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 		return
 	}
 
-	log.Printf("processesing %s", page)
+	d.Printf("processesing %s", page)
 
-	r, body, filePath, store, err := maybeGetPage(client, page)
+	r, body, filePath, store, err := d.maybeGetPage(client, page)
 	if err != nil {
-		log.Printf("getPage: %s err: %s", page, err)
+		d.Printf("getPage: %s err: %s", page, err)
 		return
 	}
 	defer drainAndClose(body)
@@ -238,19 +274,19 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 	var bodyReader io.Reader
 	if store {
 		if _, ok := config.ExcludeFiles[path.Base(filePath)]; ok {
-			log.Printf("skipping %s because exclude", filePath)
+			d.Printf("skipping %s because exclude", filePath)
 			bodyReader = body
 		} else {
-			log.Printf("storing as %s", filePath)
+			d.Printf("storing as %s", filePath)
 			fileDir := path.Dir(filePath)
 			if err := os.MkdirAll(fileDir, 0755); err != nil {
-				log.Fatalf("MkdirAll(%s) err: %s", fileDir, err)
+				d.Fatalf("MkdirAll(%s) err: %s", fileDir, err)
 				return
 			}
 
 			f, err := os.Create(filePath)
 			if err != nil {
-				log.Fatalf("Create(%s) err: %s", filePath, err)
+				d.Fatalf("Create(%s) err: %s", filePath, err)
 			}
 			defer f.Close()
 			bodyReader = io.TeeReader(body, f)
@@ -267,14 +303,14 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 
 	if r.Header.Get("Content-Type") != "text/html" {
 		if _, err := io.Copy(ioutil.Discard, bodyReader); err != nil {
-			log.Printf("Copy page: %s err: %s", page, err)
+			d.Printf("Copy page: %s err: %s", page, err)
 		}
 		return
 	}
 
 	links, err := extractLinks(bodyReader)
 	if err != nil {
-		log.Printf("extractLinks page: %s err: %s", page, err)
+		d.Printf("extractLinks page: %s err: %s", page, err)
 		return
 	}
 
@@ -282,7 +318,7 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 	for _, link := range links {
 		linkURL, err := url.Parse(link)
 		if err != nil {
-			log.Printf("url.Parse link: %s page: %s err: %s", link, page, err)
+			d.Printf("url.Parse link: %s page: %s err: %s", link, page, err)
 			return
 		}
 
@@ -295,7 +331,7 @@ func processPage(client *http.Client, page *url.URL) (retURLs []*url.URL) {
 	return retURLs
 }
 
-func crawl() {
+func (d *downloader) crawl() {
 	client := new(http.Client)
 	client.Transport = &http.Transport{
 		MaxIdleConnsPerHost: 100,
@@ -305,20 +341,20 @@ func crawl() {
 		page := tracker.FreeLink()
 		if page == nil {
 			i++
-			log.Printf("downloader waiting (%d)", i)
+			d.Printf("downloader waiting (%d)", i)
 			time.Sleep(30 * time.Second)
 			continue
 		}
 		i = 0
 
-		retURLs := processPage(client, page)
+		retURLs := d.processPage(client, page)
 		if len(retURLs) == 0 {
 			continue
 		}
 		tracker.AddFreeLinks(retURLs)
 	}
 
-	log.Println("downloader routine done")
+	d.Println("downloader routine done")
 	wg.Done()
 }
 
@@ -332,7 +368,8 @@ func main() {
 
 	log.Printf("Spawning %d downloaders", config.NumDownloaders)
 	for i := 0; i < config.NumDownloaders; i++ {
-		go crawl()
+		d := downloader{i}
+		go d.crawl()
 		wg.Add(1)
 	}
 
