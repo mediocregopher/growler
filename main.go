@@ -109,7 +109,7 @@ type downloader struct {
 
 func (d *downloader) Println(args ...interface{}) {
 	fargs := make([]interface{}, 0, len(args) + 2)
-	fargs = append(fargs, d.i, "-")
+	fargs = append(fargs, d.i, " - ")
 	fargs = append(fargs, args...)
 	log.Print(fargs...)
 }
@@ -301,7 +301,7 @@ func (d *downloader) processPage(
 	// io.Copy into an ioutil.Discard to "read" the whole page, so that we write
 	// to the page's file if necessary.
 
-	if r.Header.Get("Content-Type") != "text/html" {
+	if strings.Index(r.Header.Get("Content-Type"), "text/html") != 0 {
 		if _, err := io.Copy(ioutil.Discard, bodyReader); err != nil {
 			d.Printf("Copy page: %s err: %s", page, err)
 		}
