@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mediocregopher/growler/config"
+	"github.com/mediocregopher/growler/stats"
 	"github.com/mediocregopher/growler/tracker"
 )
 
@@ -145,6 +146,7 @@ func (d *downloader) getPage(
 ) {
 	d.Printf("GET %s", page)
 	r, err := client.Get(page.String())
+	defer stats.IncrGet(d.i)
 	if err != nil {
 		return nil, nil, "", true, err
 	}
@@ -192,6 +194,7 @@ func (d *downloader) maybeGetPage(
 	}
 
 	d.Printf("HEAD %s", page)
+	defer stats.IncrHead(d.i)
 	r, err := client.Head(page.String())
 	if err != nil {
 		return nil, nil, "", false, err
@@ -260,6 +263,7 @@ func (d *downloader) processPage(
 	}
 
 	d.Printf("processesing %s", page)
+	defer stats.IncrTotal(d.i)
 
 	r, body, filePath, store, err := d.maybeGetPage(client, page)
 	if err != nil {
@@ -359,6 +363,8 @@ func (d *downloader) crawl() {
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
+
 	srcURL, err := url.ParseRequestURI(config.Src)
 	if err != nil {
 		log.Fatalf("parsing src: %s", err)
